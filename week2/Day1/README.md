@@ -2,6 +2,13 @@
 
 A full-stack Kanban Task Board built with React (Vite + Tailwind CSS) on the frontend and Express + MongoDB (Mongoose) on the backend, with JWT-based authentication.
 
+## Live Demo
+
+- **Frontend**: https://kanban-task-board-pi-blue.vercel.app
+- **Backend API**: https://kanban-task-board-api.vercel.app
+
+Both are deployed on Vercel (backend as a serverless Node/Express function) and fully wired together — register/login/board all work end-to-end on the live link.
+
 ## Tech Stack
 
 - **Frontend**: React, Vite, Tailwind CSS, React Router, Axios
@@ -90,8 +97,8 @@ Verified via direct API calls (curl) and through the UI:
 - Requests to `/api/tasks` without a token are rejected (`401`).
 - An authenticated user can fetch and create their own tasks.
 - A task created by one user does not appear for a different authenticated user (ownership isolation confirmed).
+- Same checks re-verified against the deployed live backend (see Live Demo above), not just locally.
 
 ### Known limitations / not done on Day 1
 
 - No drag-and-drop, editing, or deleting tasks yet (planned for later days per the original scope).
-- The backend is not deployed to a cloud host — free-tier providers tried (Render, Cyclic, Koyeb, DigitalOcean) all required card verification, which the card on hand failed on repeated attempts. The app is fully functional when both frontend and backend are run locally (see Local Setup above). The frontend is deployed to Vercel for UI preview purposes only; without a hosted backend, login/register/board data-fetching will not work on that live link.

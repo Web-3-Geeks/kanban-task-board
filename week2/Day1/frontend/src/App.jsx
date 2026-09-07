@@ -20,6 +20,7 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="*" element={<Navigate to="/board" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
