@@ -6,7 +6,7 @@ const HEADER_STYLES = {
   done: "text-emerald-800",
 };
 
-function Column({ title, status, tasks }) {
+function Column({ title, status, tasks, onEdit, onDelete, onMoveNext }) {
   return (
     <div className="flex min-w-[280px] flex-1 flex-col rounded-2xl border border-white/40 bg-white/25 p-4 backdrop-blur-xl shadow-sm">
       <div className="mb-3 flex items-center justify-between">
@@ -29,7 +29,13 @@ function Column({ title, status, tasks }) {
           </p>
         )}
         {tasks.map((task) => (
-          <TaskCard key={task._id} task={task} />
+          <TaskCard
+            key={task._id}
+            task={task}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onMoveNext={onMoveNext}
+          />
         ))}
       </div>
     </div>

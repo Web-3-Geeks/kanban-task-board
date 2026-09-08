@@ -34,6 +34,7 @@ kanban-task-board/
       pages/        # Full page views (Login, Register, Board)
   week2/
     Day1/           # Snapshot of the project as it stood at the end of Day 1
+    Day2/           # Snapshot of the project as it stood at the end of Day 2
 ```
 
 ## Local Setup
@@ -102,3 +103,38 @@ Verified via direct API calls (curl) and through the UI:
 ### Known limitations / not done on Day 1
 
 - No drag-and-drop, editing, or deleting tasks yet (planned for later days per the original scope).
+
+## Day 2 — Task Management (CRUD)
+
+### What was built
+
+- **Task model extended**: added a `dueDate` field (optional `Date`, defaults to `null`).
+- **Full task CRUD API**: `POST /api/tasks`, `GET /api/tasks`, `GET /api/tasks/:id`, `PUT /api/tasks/:id`, `DELETE /api/tasks/:id` — all protected by `authMiddleware` and scoped to the authenticated user's own tasks. Create/update validate `status` and `priority` against their allowed enum values before hitting the database, and reject a blank/whitespace-only title.
+- **Ownership checks on individual tasks**: `getTaskById`, `updateTask`, and `deleteTask` all look up the task by ID, then verify `task.owner` matches `req.user.id` — returning `404` (not `403`) when it doesn't, so a user can't tell whether a task exists at all if it isn't theirs.
+- **Frontend task API layer** (`api/taskApi.js`): thin wrapper functions (`getTasks`, `createTask`, `updateTask`, `deleteTask`) around the shared Axios instance.
+- **Add/Edit Task modal** (`TaskModal`): a single reusable form for both creating and editing a task (title, description, priority, due date; status field only shown when editing). The same `onSubmit` callback is used for both — the caller (`Board`) decides whether to call `createTask` or `updateTask`.
+- **Task cards** now show a due date (when set) and a description preview, plus hover-revealed edit/delete actions and a "Start →" / "Complete →" button to move a task to the next status.
+- **Board page wiring**: local `tasks` state is updated directly after create/update/delete (no full re-fetch needed), so the UI reflects changes immediately; a page refresh re-fetches from the API, confirming persistence.
+
+### Key architectural decisions
+
+- **`TaskModal` is reusable for both create and edit**, driven by an `initialTask` prop (`null` for create) — avoids duplicating the form markup and validation logic.
+- **`key={editingTask?._id ?? "new"}` on `TaskModal`** forces React to fully remount the modal whenever the task being edited changes, so its internal form state can be initialized directly from `initialTask` via `useState`, instead of syncing it with a `useEffect` (avoids an unnecessary effect and the extra render it would cause).
+- **Status transitions use a fixed forward flow** (`todo → in-progress → done`) via a single "next step" button rather than a free-form dropdown, matching the Day 2 note that drag-and-drop/dropdowns are optional and simple buttons are an acceptable first pass.
+- **404, not 403, for tasks that exist but belong to another user** — prevents leaking information about what task IDs exist to a user who doesn't own them.
+
+### Testing performed (manual)
+
+Verified via curl and through the UI:
+- A task can be created, appears in the "To Do" column, and is scoped to the creating user.
+- A task's title, description, priority, and due date can be edited and the change is reflected immediately.
+- A task can move `To Do → In Progress → Done` via the "Start"/"Complete" buttons, and the new status persists after a page refresh.
+- A task can be deleted (after a confirmation prompt) and disappears from the UI.
+- A second, unrelated user gets `404` when trying to `GET`, `PUT`, or `DELETE` the first user's task — ownership is enforced server-side, not just hidden in the UI.
+- An invalid `status` value on update is rejected with `400`.
+- A request to any task endpoint without a token is rejected with `401`.
+
+### Known limitations / not done on Day 2
+
+- Status changes are forward-only (no "move back a step" button) and use simple buttons rather than drag-and-drop, per the Day 2 note that this is acceptable for a first pass.
+- "Assigned User" from the original task field list is not implemented as a separate concept — tasks are only ever owned by their creator; there is no multi-user assignment/collaboration in this app yet.
