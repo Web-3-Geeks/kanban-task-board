@@ -5,13 +5,18 @@ const { logActivity, notify } = require("../utils/activityLog");
 const VALID_STATUSES = ["todo", "in-progress", "done"];
 const VALID_PRIORITIES = ["low", "medium", "high"];
 
-const isOwner = (task, userId) => task.owner.toString() === userId;
+const idOf = (field) => {
+  if (!field) return null;
+  return (field._id ?? field).toString();
+};
+
+const isOwner = (task, userId) => idOf(task.owner) === userId;
 const isOwnerOrAssignee = (task, userId) =>
-  isOwner(task, userId) || (task.assignedTo && task.assignedTo.toString() === userId);
+  isOwner(task, userId) || idOf(task.assignedTo) === userId;
 
 const getOtherParty = (task, actorId) => {
-  const ownerId = task.owner.toString();
-  const assigneeId = task.assignedTo ? task.assignedTo.toString() : null;
+  const ownerId = idOf(task.owner);
+  const assigneeId = idOf(task.assignedTo);
   if (actorId === ownerId) return assigneeId;
   if (actorId === assigneeId) return ownerId;
   return null;
