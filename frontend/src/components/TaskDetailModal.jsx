@@ -1,4 +1,8 @@
+import { useEffect, useState } from "react";
 import { getUrgency, formatDueDate, getInitials } from "../utils/taskUtils";
+import { useAuth } from "../context/AuthContext";
+import { getComments, createComment, updateComment, deleteComment } from "../api/commentApi";
+import { getActivity } from "../api/activityApi";
 
 const PRIORITY_STYLES = {
   high: "bg-rose-100 text-rose-700",
@@ -12,11 +16,131 @@ const STATUS_LABELS = {
   done: "Done",
 };
 
+function timeAgo(date) {
+  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function CommentItem({ comment, onEdit, onDelete }) {
+  const { user } = useAuth();
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(comment.content);
+  const isMine = comment.author?._id === user?.id;
+
+  const handleSave = async () => {
+    if (!text.trim()) return;
+    await onEdit(comment._id, text.trim());
+    setEditing(false);
+  };
+
+  return (
+    <div className="rounded-lg bg-white/60 p-3">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="flex items-center gap-2 text-xs font-medium text-emerald-950">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-700 text-[9px] font-semibold text-white">
+            {getInitials(comment.author?.name)}
+          </span>
+          {comment.author?.name}
+          <span className="font-normal text-emerald-900/40">
+            {timeAgo(comment.createdAt)}
+          </span>
+        </span>
+        {isMine && !editing && (
+          <div className="flex gap-1 opacity-0 transition group-hover:opacity-100 hover:opacity-100">
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              aria-label="Edit comment"
+              className="cursor-pointer rounded p-0.5 text-emerald-900/40 hover:text-emerald-900"
+            >
+              ✎
+            </button>
+            <button
+              type="button"
+              onClick={() => onDelete(comment._id)}
+              aria-label="Delete comment"
+              className="cursor-pointer rounded p-0.5 text-emerald-900/40 hover:text-rose-700"
+            >
+              🗑
+            </button>
+          </div>
+        )}
+      </div>
+
+      {editing ? (
+        <div className="flex flex-col gap-2">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={2}
+            className="resize-none rounded-lg border border-emerald-900/20 bg-white px-2 py-1 text-sm text-emerald-950 outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setText(comment.content);
+                setEditing(false);
+              }}
+              className="cursor-pointer text-xs text-emerald-900/60 hover:underline"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              className="cursor-pointer text-xs font-medium text-emerald-700 hover:underline"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-emerald-900/80">{comment.content}</p>
+      )}
+    </div>
+  );
+}
+
 function TaskDetailModal({ task, onClose, onEdit, onDelete }) {
+  const [comments, setComments] = useState([]);
+  const [activity, setActivity] = useState([]);
+  const [newComment, setNewComment] = useState("");
+  const [tab, setTab] = useState("comments");
+
+  useEffect(() => {
+    if (!task) return;
+    getComments(task._id).then((res) => setComments(res.data));
+    getActivity(task._id).then((res) => setActivity(res.data));
+  }, [task]);
+
   if (!task) return null;
 
   const urgency = getUrgency(task);
   const dueDateLabel = formatDueDate(task.dueDate);
+
+  const handleAddComment = async (e) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+    const res = await createComment(task._id, newComment.trim());
+    setComments((prev) => [...prev, res.data]);
+    setNewComment("");
+  };
+
+  const handleEditComment = async (commentId, content) => {
+    const res = await updateComment(commentId, content);
+    setComments((prev) => prev.map((c) => (c._id === commentId ? res.data : c)));
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    await deleteComment(commentId);
+    setComments((prev) => prev.filter((c) => c._id !== commentId));
+  };
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose}>
@@ -118,6 +242,89 @@ function TaskDetailModal({ task, onClose, onEdit, onDelete }) {
             Delete
           </button>
         </div>
+
+        <div className="mt-6 flex border-b border-emerald-900/10">
+          <button
+            type="button"
+            onClick={() => setTab("comments")}
+            className={`cursor-pointer border-b-2 px-3 py-2 text-sm font-medium ${
+              tab === "comments"
+                ? "border-emerald-700 text-emerald-900"
+                : "border-transparent text-emerald-900/50"
+            }`}
+          >
+            Comments ({comments.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("activity")}
+            className={`cursor-pointer border-b-2 px-3 py-2 text-sm font-medium ${
+              tab === "activity"
+                ? "border-emerald-700 text-emerald-900"
+                : "border-transparent text-emerald-900/50"
+            }`}
+          >
+            Activity ({activity.length})
+          </button>
+        </div>
+
+        {tab === "comments" && (
+          <div className="mt-3 flex flex-col gap-3">
+            {comments.length === 0 && (
+              <p className="text-center text-xs text-emerald-900/40">No comments yet</p>
+            )}
+            {comments.map((c) => (
+              <div key={c._id} className="group">
+                <CommentItem
+                  comment={c}
+                  onEdit={handleEditComment}
+                  onDelete={handleDeleteComment}
+                />
+              </div>
+            ))}
+
+            <form onSubmit={handleAddComment} className="mt-1 flex gap-2">
+              <input
+                type="text"
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="Add a comment..."
+                className="flex-1 rounded-lg border border-emerald-900/20 bg-white px-3 py-2 text-sm text-emerald-950 outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <button
+                type="submit"
+                className="cursor-pointer rounded-lg bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800"
+              >
+                Post
+              </button>
+            </form>
+          </div>
+        )}
+
+        {tab === "activity" && (
+          <div className="mt-3 flex flex-col gap-2">
+            {activity.length === 0 && (
+              <p className="text-center text-xs text-emerald-900/40">No activity yet</p>
+            )}
+            {activity.map((a) => (
+              <div key={a._id} className="flex items-start gap-2 text-xs">
+                <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                <p className="text-emerald-900/70">
+                  <span className="font-medium text-emerald-950">{a.user?.name}</span>{" "}
+                  {a.action}
+                  {a.previousValue && a.newValue && (
+                    <>
+                      {" "}
+                      from <span className="italic">{a.previousValue}</span> to{" "}
+                      <span className="italic">{a.newValue}</span>
+                    </>
+                  )}
+                  <span className="ml-1 text-emerald-900/40">{timeAgo(a.createdAt)}</span>
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

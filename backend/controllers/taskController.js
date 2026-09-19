@@ -1,5 +1,6 @@
 const Task = require("../models/Task");
 const User = require("../models/User");
+const { logActivity, notify } = require("../utils/activityLog");
 
 const VALID_STATUSES = ["todo", "in-progress", "done"];
 const VALID_PRIORITIES = ["low", "medium", "high"];
@@ -7,6 +8,14 @@ const VALID_PRIORITIES = ["low", "medium", "high"];
 const isOwner = (task, userId) => task.owner.toString() === userId;
 const isOwnerOrAssignee = (task, userId) =>
   isOwner(task, userId) || (task.assignedTo && task.assignedTo.toString() === userId);
+
+const getOtherParty = (task, actorId) => {
+  const ownerId = task.owner.toString();
+  const assigneeId = task.assignedTo ? task.assignedTo.toString() : null;
+  if (actorId === ownerId) return assigneeId;
+  if (actorId === assigneeId) return ownerId;
+  return null;
+};
 
 const validateAssignee = async (assignedTo) => {
   if (!assignedTo) return true;
@@ -92,6 +101,18 @@ const createTask = async (req, res) => {
       owner: req.user.id,
     });
 
+    await logActivity(task._id, req.user.id, "created", null, title);
+
+    if (assignedTo) {
+      await notify(
+        assignedTo,
+        req.user.id,
+        "assigned",
+        `You were assigned to "${title}"`,
+        task._id
+      );
+    }
+
     const populated = await task.populate([
       { path: "owner", select: "name email" },
       { path: "assignedTo", select: "name email" },
@@ -142,15 +163,77 @@ const updateTask = async (req, res) => {
     }
 
     const { title, description, status, priority, dueDate, assignedTo } = req.body;
+    const changes = [];
+    const otherPartyBefore = getOtherParty(task, req.user.id);
 
-    if (title !== undefined) task.title = title;
-    if (description !== undefined) task.description = description;
-    if (status !== undefined) task.status = status;
-    if (priority !== undefined) task.priority = priority;
-    if (dueDate !== undefined) task.dueDate = dueDate;
-    if (assignedTo !== undefined) task.assignedTo = assignedTo || null;
+    if (status !== undefined && status !== task.status) {
+      changes.push({ action: "status changed", prev: task.status, next: status });
+      task.status = status;
+    }
+    if (priority !== undefined && priority !== task.priority) {
+      changes.push({ action: "priority changed", prev: task.priority, next: priority });
+      task.priority = priority;
+    }
+    if (dueDate !== undefined && String(dueDate) !== String(task.dueDate)) {
+      changes.push({
+        action: "due date changed",
+        prev: task.dueDate ? task.dueDate.toISOString().slice(0, 10) : "none",
+        next: dueDate ? new Date(dueDate).toISOString().slice(0, 10) : "none",
+      });
+      task.dueDate = dueDate;
+    }
+    if (assignedTo !== undefined) {
+      const newAssignee = assignedTo || null;
+      const oldAssignee = task.assignedTo ? task.assignedTo.toString() : null;
+      if (newAssignee !== oldAssignee) {
+        const [prevUser, nextUser] = await Promise.all([
+          oldAssignee ? User.findById(oldAssignee) : null,
+          newAssignee ? User.findById(newAssignee) : null,
+        ]);
+        changes.push({
+          action: "assigned",
+          prev: prevUser?.name ?? "unassigned",
+          next: nextUser?.name ?? "unassigned",
+        });
+        task.assignedTo = newAssignee;
+        if (newAssignee) {
+          await notify(
+            newAssignee,
+            req.user.id,
+            "assigned",
+            `You were assigned to "${task.title}"`,
+            task._id
+          );
+        }
+      }
+    }
+    if (title !== undefined && title !== task.title) task.title = title;
+    if (description !== undefined && description !== task.description) {
+      task.description = description;
+    }
+
+    if (changes.length === 0 && (title !== undefined || description !== undefined)) {
+      changes.push({ action: "updated", prev: null, next: null });
+    }
 
     await task.save();
+
+    for (const change of changes) {
+      await logActivity(task._id, req.user.id, change.action, change.prev, change.next);
+    }
+
+    const statusOrPriorityOrDueChanged = changes.some((c) =>
+      ["status changed", "priority changed", "due date changed", "updated"].includes(c.action)
+    );
+    if (statusOrPriorityOrDueChanged && otherPartyBefore) {
+      await notify(
+        otherPartyBefore,
+        req.user.id,
+        "task-updated",
+        `"${task.title}" was updated`,
+        task._id
+      );
+    }
 
     const populated = await task.populate([
       { path: "owner", select: "name email" },
@@ -171,6 +254,7 @@ const deleteTask = async (req, res) => {
       return res.status(404).json({ message: "Task not found" });
     }
 
+    await logActivity(task._id, req.user.id, "deleted", task.title, null);
     await task.deleteOne();
 
     res.status(200).json({ message: "Task deleted" });
@@ -187,4 +271,5 @@ module.exports = {
   deleteTask,
   isOwner,
   isOwnerOrAssignee,
+  getOtherParty,
 };

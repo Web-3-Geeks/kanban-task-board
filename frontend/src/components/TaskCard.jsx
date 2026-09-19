@@ -19,7 +19,7 @@ const STATUS_FLOW = {
   done: { next: null, label: null },
 };
 
-function TaskCard({ task, onEdit, onDelete, onMoveNext, onOpenDetail }) {
+function TaskCard({ task, onEdit, onDelete, onMoveNext, onOpenDetail, onCyclePriority }) {
   const dueDateLabel = formatDueDate(task.dueDate);
   const nextStep = STATUS_FLOW[task.status];
   const urgency = getUrgency(task);
@@ -50,13 +50,16 @@ function TaskCard({ task, onEdit, onDelete, onMoveNext, onOpenDetail }) {
       }`}
     >
       <div className="mb-2 flex items-center justify-between">
-        <span
-          className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${
+        <button
+          type="button"
+          onClick={stop(onCyclePriority)}
+          title="Click to cycle priority"
+          className={`cursor-pointer rounded-full px-2.5 py-0.5 text-xs font-medium capitalize transition hover:brightness-95 ${
             PRIORITY_STYLES[task.priority] ?? PRIORITY_STYLES.medium
           }`}
         >
           {task.priority}
-        </span>
+        </button>
 
         <div className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
           <button

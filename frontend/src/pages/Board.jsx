@@ -112,33 +112,35 @@ function Board() {
 
   const handleDeleteConfirm = async () => {
     const task = confirmTask;
+    if (!task || pendingIds.has(task._id)) return;
     setConfirmTask(null);
+    markPending(task._id, true);
     try {
       await deleteTask(task._id);
       setTasks((prev) => prev.filter((t) => t._id !== task._id));
       showToast("Task deleted", "success");
     } catch {
       showToast("Failed to delete task", "error");
+    } finally {
+      markPending(task._id, false);
     }
   };
 
   const handleOpenDetail = (task) => setDetailTask(task);
 
-  const applyStatusChange = async (task, nextStatus) => {
+  const applyOptimisticUpdate = async (task, patch, revertMessage) => {
     if (pendingIds.has(task._id)) return;
 
     const previousTasks = tasks;
     markPending(task._id, true);
-    setTasks((prev) =>
-      prev.map((t) => (t._id === task._id ? { ...t, status: nextStatus } : t))
-    );
+    setTasks((prev) => prev.map((t) => (t._id === task._id ? { ...t, ...patch } : t)));
 
     try {
-      const res = await updateTask(task._id, { status: nextStatus });
+      const res = await updateTask(task._id, patch);
       setTasks((prev) => prev.map((t) => (t._id === task._id ? res.data : t)));
     } catch {
       setTasks(previousTasks);
-      showToast("Couldn't move task — reverted", "error");
+      showToast(revertMessage, "error");
     } finally {
       markPending(task._id, false);
     }
@@ -146,7 +148,16 @@ function Board() {
 
   const handleMoveNext = (task) => {
     const next = task.status === "todo" ? "in-progress" : "done";
-    applyStatusChange(task, next);
+    applyOptimisticUpdate(task, { status: next }, "Couldn't move task — reverted");
+  };
+
+  const PRIORITY_CYCLE = { low: "medium", medium: "high", high: "low" };
+  const handleCyclePriority = (task) => {
+    applyOptimisticUpdate(
+      task,
+      { priority: PRIORITY_CYCLE[task.priority] },
+      "Couldn't change priority — reverted"
+    );
   };
 
   const handleDragStart = (event) => {
@@ -163,7 +174,7 @@ function Board() {
     const newStatus = over.id;
     if (!task || task.status === newStatus) return;
 
-    applyStatusChange(task, newStatus);
+    applyOptimisticUpdate(task, { status: newStatus }, "Couldn't move task — reverted");
   };
 
   const totalCount = tasks.length;
@@ -217,6 +228,7 @@ function Board() {
                 onDelete={handleDeleteRequest}
                 onMoveNext={handleMoveNext}
                 onOpenDetail={handleOpenDetail}
+                onCyclePriority={handleCyclePriority}
               />
             ))
           )}
@@ -243,6 +255,7 @@ function Board() {
       />
 
       <TaskDetailModal
+        key={detailTask?._id ?? "none"}
         task={detailTask}
         onClose={() => setDetailTask(null)}
         onEdit={handleEditClick}
