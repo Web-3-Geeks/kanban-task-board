@@ -1,3 +1,4 @@
+import { useDroppable } from "@dnd-kit/core";
 import TaskCard from "./TaskCard";
 
 const HEADER_STYLES = {
@@ -6,9 +7,18 @@ const HEADER_STYLES = {
   done: "text-emerald-800",
 };
 
-function Column({ title, status, tasks, onEdit, onDelete, onMoveNext }) {
+function Column({ title, status, tasks, onEdit, onDelete, onMoveNext, onOpenDetail }) {
+  const { setNodeRef, isOver } = useDroppable({ id: status });
+
   return (
-    <div className="flex min-w-[280px] flex-1 flex-col rounded-2xl border border-white/40 bg-white/25 p-4 backdrop-blur-xl shadow-sm">
+    <div
+      ref={setNodeRef}
+      className={`flex min-w-[280px] flex-1 flex-col rounded-2xl border p-4 backdrop-blur-xl shadow-sm transition ${
+        isOver
+          ? "border-emerald-500/60 bg-emerald-100/40"
+          : "border-white/40 bg-white/25"
+      }`}
+    >
       <div className="mb-3 flex items-center justify-between">
         <h2
           className={`text-sm font-semibold ${
@@ -35,6 +45,7 @@ function Column({ title, status, tasks, onEdit, onDelete, onMoveNext }) {
             onEdit={onEdit}
             onDelete={onDelete}
             onMoveNext={onMoveNext}
+            onOpenDetail={onOpenDetail}
           />
         ))}
       </div>

@@ -7,7 +7,7 @@ const STATUSES = [
   { value: "done", label: "Done" },
 ];
 
-function TaskModal({ open, onClose, onSubmit, initialTask }) {
+function TaskModal({ open, onClose, onSubmit, initialTask, users = [] }) {
   const [title, setTitle] = useState(initialTask?.title ?? "");
   const [description, setDescription] = useState(initialTask?.description ?? "");
   const [priority, setPriority] = useState(initialTask?.priority ?? "medium");
@@ -15,6 +15,7 @@ function TaskModal({ open, onClose, onSubmit, initialTask }) {
   const [dueDate, setDueDate] = useState(
     initialTask?.dueDate ? initialTask.dueDate.slice(0, 10) : ""
   );
+  const [assignedTo, setAssignedTo] = useState(initialTask?.assignedTo?._id ?? "");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -27,7 +28,14 @@ function TaskModal({ open, onClose, onSubmit, initialTask }) {
     setError("");
     setLoading(true);
     try {
-      await onSubmit({ title, description, priority, status, dueDate: dueDate || null });
+      await onSubmit({
+        title,
+        description,
+        priority,
+        status,
+        dueDate: dueDate || null,
+        assignedTo: assignedTo || null,
+      });
       onClose();
     } catch (error) {
       setError(error.response?.data?.message || "Something went wrong");
@@ -116,6 +124,25 @@ function TaskModal({ open, onClose, onSubmit, initialTask }) {
                 className="rounded-lg border border-emerald-900/20 bg-white px-3 py-2 text-sm text-emerald-950 outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label htmlFor="task-assignee" className="text-sm font-medium text-emerald-950">
+              Assign To
+            </label>
+            <select
+              id="task-assignee"
+              value={assignedTo}
+              onChange={(e) => setAssignedTo(e.target.value)}
+              className="rounded-lg border border-emerald-900/20 bg-white px-3 py-2 text-sm text-emerald-950 outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="">Unassigned</option>
+              {users.map((u) => (
+                <option key={u._id} value={u._id}>
+                  {u.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {initialTask && (

@@ -1,7 +1,7 @@
 import axiosInstance from "./axiosInstance";
 
 
-export const getTasks = () => axiosInstance.get("/tasks");
+export const getTasks = (params = {}) => axiosInstance.get("/tasks", { params });
 
 export const createTask = (data) => axiosInstance.post("/tasks", data);
 
