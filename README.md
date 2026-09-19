@@ -35,6 +35,8 @@ kanban-task-board/
   week2/
     Day1/           # Snapshot of the project as it stood at the end of Day 1
     Day2/           # Snapshot of the project as it stood at the end of Day 2
+    Day3/           # Snapshot of the project as it stood at the end of Day 3
+    Day4/           # Snapshot of the project as it stood at the end of Day 4
 ```
 
 ## Local Setup
@@ -138,3 +140,59 @@ Verified via curl and through the UI:
 
 - Status changes are forward-only (no "move back a step" button) and use simple buttons rather than drag-and-drop, per the Day 2 note that this is acceptable for a first pass.
 - "Assigned User" from the original task field list is not implemented as a separate concept — tasks are only ever owned by their creator; there is no multi-user assignment/collaboration in this app yet.
+
+## Day 3 — Assignment, Filtering, Sorting, Drag-and-Drop
+
+### What was built
+
+- **Task assignment**: `Task.assignedTo` (optional `ObjectId` ref to `User`). A new `GET /api/users` endpoint lists all registered users (name/email only) to populate the assignee dropdown in the Add/Edit Task modal.
+- **Extended authorization model**: a task is now visible to and editable by its **owner or its assignee** (`isOwnerOrAssignee`); only the **owner** can delete it. `GET /api/tasks` returns the union of tasks a user owns or is assigned to.
+- **Query-param filtering** on `GET /api/tasks`: `priority`, `status`, `assignedTo` (accepts a user id, or the literal `me`), `search` (case-insensitive match on title/description), and `dueFrom`/`dueTo` (due-date range). Filters combine with AND logic and are always scoped within the tasks the caller can see.
+- **Filter bar UI**: search box, priority/assignee/due-date-range filters, a sort dropdown (due date / priority / recently updated — persisted to `localStorage`), and a "Clear Filters" action that only appears when a filter is active.
+- **Due-date urgency indicators**: tasks past their due date (and not yet Done) get a red left-border and red due-date text; tasks due within 48 hours get an amber one. Computed client-side from `dueDate`/`status`, so it updates automatically after any edit.
+- **Drag-and-drop** (via `@dnd-kit`): dragging a card into a different column updates its status with an **optimistic UI update** — the card moves immediately, the API call fires in the background, and the change is rolled back (with an error toast) if the request fails. A `DragOverlay` shows a floating preview while dragging.
+- **Task detail view**: clicking a card (outside its edit/delete/move buttons) opens a slide-over panel showing every field, who created and who's assigned to the task, and Edit/Delete actions.
+
+### Key architectural decisions
+
+- **Filtering happens server-side, sorting happens client-side.** Filters change *which* tasks are visible (and are cheap to push to the database query), while sort order is a per-viewer preference that only matters for display — doing it in the browser avoids a round-trip on every sort-dropdown change.
+- **A single global sort control, not per-column.** The spec allowed either; one control is simpler for a user to reason about and matches how the filter bar already works globally.
+- **`useDraggable`/`useDroppable` directly, not full `@dnd-kit/sortable` reordering** — the only requirement is moving a card between columns (status change), not reordering within a column, so the simpler primitives are enough.
+- **404 (not 403) still applies to assignees**, not just owners — an assignee who loses their assignment shouldn't be able to distinguish "task reassigned away from me" from "task deleted" from the API's response.
+
+### Testing performed (manual)
+
+- A task created and assigned to a second user is visible to and status-editable by that user, but only the creator can delete it (`404` for the assignee's delete attempt).
+- `?assignedTo=me`, `?search=`, and `?priority=` filters each return the correct, scoped subset of tasks.
+- Dragging a card to another column updates its status in the database and survives a page refresh.
+- **Bug found and fixed during testing**: `getTaskById` populated `owner`/`assignedTo` *before* checking authorization, which turned the ownership comparison (`ObjectId.toString()`) into a comparison against a populated document — silently breaking assignee access (an assignee got a `404` on `GET` while the identical check in `PUT` worked, since `updateTask` checks authorization before populating). Fixed by making the owner/assignee comparison helper unwrap a populated `_id` when present, and verified live afterward.
+
+## Day 4 — Comments, Activity History, Notifications, Optimistic Updates
+
+### What was built
+
+- **Comments**: `Comment` model (`task`, `author`, `content`, timestamps). `POST/GET /api/tasks/:id/comments` (any owner-or-assignee can read/add), `PUT/DELETE /api/comments/:id` (author-only). Shown in the task detail view's Comments tab, with inline edit/delete for a user's own comments.
+- **Activity history**: `Activity` model (`task`, `user`, `action`, `previousValue`, `newValue`, timestamp). A shared `logActivity()` helper is called from the task controller on create, status/priority/due-date/assignment changes, and delete, and from the comment controller on new comments. Read via `GET /api/tasks/:id/activity`, shown in the detail view's Activity tab (newest first).
+- **Notifications**: `Notification` model (`recipient`, `type`, `message`, `task`, `read`). A `notify()` helper fires when: a task is assigned to someone, an assigned task's status/priority/due date changes (notifies "the other party" — whichever of owner/assignee didn't make the change), or someone comments on a task (notifies the other party). `GET /api/notifications` (with unread count), `PUT /api/notifications/:id/read`, `PUT /api/notifications/read-all`. Shown as a bell icon in the Navbar with an unread badge and a dropdown list.
+- **Optimistic updates with rollback**: status changes (drag-and-drop and the "Start/Complete" buttons) and priority changes (click the priority pill to cycle Low → Medium → High) update the UI immediately; if the API call fails, the previous state is restored and an error toast is shown. A `pendingIds` set guards against firing a second request for a task that already has one in flight (also used to prevent double-clicking delete).
+- **Board polish**: a loading state while tasks are being fetched, a custom `ConfirmDialog` (replacing `window.confirm`) for delete confirmation, and a toast notification system for success/error feedback.
+
+### Key architectural decisions
+
+- **Notifications never target the actor themselves** — the `notify()` helper is a no-op if the recipient and the person performing the action are the same user, so you don't get notified about your own changes.
+- **A single `applyOptimisticUpdate(task, patch, revertMessage)` helper** backs both drag-and-drop status changes and priority cycling — one rollback code path instead of two nearly-identical ones.
+- **Activity logging is fire-and-forget relative to the response** but still `await`ed inside the same request/response cycle (not queued) — simpler to reason about for a project this size, at the cost of a few extra milliseconds per mutating request.
+- **A task's activity log becomes inaccessible once the task is deleted** (the endpoint checks the task still exists before returning its activity), even though a `"deleted"` activity record is written just before deletion. This is an intentional, documented simplification rather than building a separate "detached" activity view for deleted tasks.
+
+### Testing performed (manual)
+
+- Full collaboration scenario end-to-end: User A creates a task and assigns it to User B → User B receives an "assigned" notification, updates the status, and adds a comment → User A receives notifications for both, and sees the comment plus the full activity trail (created → assigned → status changed → comment added) in the detail view.
+- A user can edit/delete their own comments; attempting to edit/delete another user's comment is rejected.
+- Marking a single notification read, and "mark all as read", both update the unread badge count correctly and persist after refresh.
+- Simulated a failed status-change request (stopping the backend mid-drag) — the dragged card snapped back to its original column and an error toast appeared, with no inconsistent leftover state.
+- All Day 2/Day 3 CRUD, ownership, and filtering behavior re-verified as still working (regression check).
+
+### Known limitations / not done on Day 4
+
+- Notifications are fetched on load and when the bell dropdown opens — there's no real-time push (WebSockets), per the Day 4 instruction not to add that.
+- No per-notification-type preferences — every relevant event notifies the other party, with no way to mute a specific task or event type.
