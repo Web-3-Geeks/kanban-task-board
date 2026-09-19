@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { DndContext, DragOverlay } from "@dnd-kit/core";
+import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import Navbar from "../components/Navbar";
 import StatCard from "../components/StatCard";
 import Column from "../components/Column";
@@ -22,6 +22,10 @@ const COLUMNS = [
 const EMPTY_FILTERS = { search: "", priority: "", assignedTo: "", dueFrom: "", dueTo: "" };
 
 function Board() {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -208,7 +212,7 @@ function Board() {
         users={users}
       />
 
-      <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <main className="flex flex-1 gap-4 overflow-x-auto px-4">
           {loading ? (
             <div className="flex flex-1 items-center justify-center py-20 text-sm text-emerald-900/50">
