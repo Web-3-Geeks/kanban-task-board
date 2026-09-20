@@ -115,9 +115,18 @@ function TaskDetailModal({ task, onClose, onEdit, onDelete }) {
 
   useEffect(() => {
     if (!task) return;
-    getComments(task._id).then((res) => setComments(res.data));
-    getActivity(task._id).then((res) => setActivity(res.data));
+    console.log("[DEBUG] fetching for task", task._id);
+    getComments(task._id).then((res) => {
+      console.log("[DEBUG] comments response", res.data);
+      setComments(res.data);
+    });
+    getActivity(task._id).then((res) => {
+      console.log("[DEBUG] activity response", res.data);
+      setActivity(res.data);
+    });
   }, [task]);
+
+  console.log("[DEBUG] render, comments.length=", comments.length, "task?._id=", task?._id);
 
   if (!task) return null;
 
