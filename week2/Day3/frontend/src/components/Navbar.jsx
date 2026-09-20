@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import NotificationBell from "./NotificationBell";
 
 function Navbar() {
   const { user, logout } = useAuth();
@@ -23,6 +24,8 @@ const handleLogout = () => {
       </div>
 
       <div className="flex items-center gap-4">
+        <NotificationBell />
+
         <div className="hidden sm:flex flex-col items-end leading-tight">
           <span className="text-sm font-medium text-emerald-950">
             {user?.name ?? "Guest User"}

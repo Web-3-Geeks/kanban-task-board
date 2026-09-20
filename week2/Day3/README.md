@@ -191,6 +191,15 @@ Verified via curl and through the UI:
 - Marking a single notification read, and "mark all as read", both update the unread badge count correctly and persist after refresh.
 - Simulated a failed status-change request (stopping the backend mid-drag) — the dragged card snapped back to its original column and an error toast appeared, with no inconsistent leftover state.
 - All Day 2/Day 3 CRUD, ownership, and filtering behavior re-verified as still working (regression check).
+- Full end-to-end pass against the **live deployed site** using a headless browser (Playwright), not just curl — this caught two bugs that curl-only testing couldn't have: the SPA rewrite issue and the drag-sensor/click conflict below.
+
+### Bugs found in live browser testing (and fixed)
+
+- **Direct navigation/refresh 404'd on any route but `/`.** Vercel's static hosting doesn't know to serve `index.html` for client-side routes by default, so opening `/login` or `/board` directly (or refreshing on them) returned a raw 404 from Vercel itself, before React Router ever got a chance to run. Fixed with a `frontend/vercel.json` rewrite (`"/(.*)" → "/index.html"`).
+- **Clicking a task card silently failed to open the detail view.** `dnd-kit`'s `useDraggable` has no default activation distance, so it captured the pointer-down of an ordinary click as a (zero-distance) drag attempt and swallowed the subsequent click event — this worked fine with a mouse in casual testing but failed reliably under an automated click. Fixed by configuring `PointerSensor` with `activationConstraint: { distance: 8 }`, so a plain click no longer registers as a drag.
+- **`getTaskById` returned 404 for a task's assignee** (documented above in Day 3) even though the identical ownership check worked in `updateTask` — caused by populating `owner`/`assignedTo` before running the authorization check, turning an `ObjectId` comparison into a comparison against a populated document.
+
+None of these three were caught by curl-only testing (curl doesn't run JavaScript, doesn't simulate real click/pointer event sequences, and hits the API server directly rather than the static frontend host) — they only surfaced once the live site was driven with an actual browser.
 
 ### Known limitations / not done on Day 4
 

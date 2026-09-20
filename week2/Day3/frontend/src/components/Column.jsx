@@ -7,7 +7,7 @@ const HEADER_STYLES = {
   done: "text-emerald-800",
 };
 
-function Column({ title, status, tasks, onEdit, onDelete, onMoveNext, onOpenDetail }) {
+function Column({ title, status, tasks, onEdit, onDelete, onMoveNext, onOpenDetail, onCyclePriority }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
 
   return (
@@ -46,6 +46,7 @@ function Column({ title, status, tasks, onEdit, onDelete, onMoveNext, onOpenDeta
             onDelete={onDelete}
             onMoveNext={onMoveNext}
             onOpenDetail={onOpenDetail}
+            onCyclePriority={onCyclePriority}
           />
         ))}
       </div>
